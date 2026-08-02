@@ -42,11 +42,15 @@ class Remediation(BaseModel):
     learningNote: str
 
 
-def check_api_key(value: str | None) -> None:
+def check_bearer_token(value: str | None) -> None:
     if not AI_API_KEY:
         raise HTTPException(status_code=503, detail="AI_API_KEY no configurada")
-    if value != AI_API_KEY:
-        raise HTTPException(status_code=401, detail="API Key no válida")
+    if not value:
+        raise HTTPException(status_code=401, detail="Bearer token no proporcionado")
+
+    scheme, separator, token = value.partition(" ")
+    if scheme.lower() != "bearer" or not separator or token.strip() != AI_API_KEY:
+        raise HTTPException(status_code=401, detail="Bearer token no válido")
 
 
 def create_prompt(finding: Finding) -> str:
@@ -110,8 +114,8 @@ def health() -> dict[str, str]:
 @app.post("/api/v1/remediations", response_model=Remediation)
 def create_remediation(
     finding: Finding,
-    x_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> Remediation:
-    check_api_key(x_api_key)
+    check_bearer_token(authorization)
     result = ask_ollama(finding)
     return Remediation(findingId=finding.id, model=OLLAMA_MODEL, **result)

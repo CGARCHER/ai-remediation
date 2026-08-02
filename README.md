@@ -37,7 +37,7 @@ POST /api/v1/remediations
 La consulta `POST` requiere la cabecera:
 
 ```text
-X-API-Key: tu-clave
+Authorization: Bearer tu-clave
 ```
 
 La API solo propone una explicación y una posible remediación. No modifica
