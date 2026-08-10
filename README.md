@@ -28,8 +28,12 @@ Para habilitar Gemini añade:
 
 ```env
 GEMINI_API_KEY=clave-generada-en-google-ai-studio
-GEMINI_MODEL=gemini-flash-latest
+GEMINI_MODELS=gemini-3.5-flash-lite,gemini-3.1-flash-lite
 ```
+
+Los modelos se consultan en el orden indicado. Si todos fallan por cuota, timeout o un error temporal, la API utiliza Qwen mediante Ollama. Para añadir o quitar modelos, modifica únicamente la lista separada por comas.
+
+La variable anterior `GEMINI_MODEL` continúa siendo válida cuando no se define `GEMINI_MODELS`.
 
 No guardes el fichero `.env` en Git.
 

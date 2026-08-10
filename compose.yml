@@ -17,7 +17,8 @@ services:
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:3b}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
+      GEMINI_MODELS: ${GEMINI_MODELS:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
       AI_API_KEY: ${AI_API_KEY:?Define AI_API_KEY en Dokploy o en .env}
     expose:
       - "8000"

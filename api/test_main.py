@@ -1,9 +1,12 @@
 import unittest
+from unittest.mock import patch
 
 from fastapi import HTTPException
 
 from main import (
     Finding,
+    GEMINI_MODELS,
+    ask_gemini_with_fallback,
     is_safe_relative_path,
     parse_json_response,
     synthetic_remediation,
@@ -12,6 +15,56 @@ from main import (
 
 
 class RemediationTests(unittest.TestCase):
+    def test_gemini_models_are_configured_in_order(self) -> None:
+        self.assertGreaterEqual(len(GEMINI_MODELS), 1)
+        self.assertEqual(GEMINI_MODELS[0], "gemini-3.5-flash-lite")
+
+    def test_second_gemini_model_is_used_after_rate_limit(self) -> None:
+        finding = Finding(
+            id="CVE-2021-44228",
+            severity="CRITICAL",
+            tool="Dependency-Check",
+            category="SCA",
+            description="Dependencia vulnerable.",
+        )
+        expected = {"explanation": "Resultado del segundo modelo."}
+
+        with (
+            patch("main.GEMINI_MODELS", ("first", "second")),
+            patch(
+                "main.ask_gemini",
+                side_effect=[HTTPException(status_code=429), (expected, 10)],
+            ),
+            patch("main.ask_ollama") as ask_ollama,
+        ):
+            result, _, provider, model = ask_gemini_with_fallback(finding)
+
+        self.assertEqual(result, expected)
+        self.assertEqual(provider, "gemini")
+        self.assertEqual(model, "second")
+        ask_ollama.assert_not_called()
+
+    def test_ollama_is_used_after_all_gemini_models_fail(self) -> None:
+        finding = Finding(
+            id="CVE-2021-44228",
+            severity="CRITICAL",
+            tool="Dependency-Check",
+            category="SCA",
+            description="Dependencia vulnerable.",
+        )
+        expected = {"explanation": "Resultado local."}
+
+        with (
+            patch("main.GEMINI_MODELS", ("first", "second")),
+            patch("main.ask_gemini", side_effect=HTTPException(status_code=429)),
+            patch("main.ask_ollama", return_value=(expected, 10)),
+        ):
+            result, _, provider, model = ask_gemini_with_fallback(finding)
+
+        self.assertEqual(result, expected)
+        self.assertEqual(provider, "ollama")
+        self.assertEqual(model, "qwen2.5-coder:3b")
+
     def test_synthetic_finding_never_generates_a_patch(self) -> None:
         finding = Finding(
             id="CVE-TEST-001",

@@ -17,7 +17,14 @@ from pydantic import BaseModel, Field
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:3b")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+_gemini_models_value = (
+    os.getenv("GEMINI_MODELS")
+    or os.getenv("GEMINI_MODEL")
+    or "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+)
+GEMINI_MODELS = tuple(
+    dict.fromkeys(model.strip() for model in _gemini_models_value.split(",") if model.strip())
+)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").strip().lower()
 AI_API_KEY = os.getenv("AI_API_KEY", "")
@@ -296,7 +303,7 @@ def ask_ollama(finding: Finding) -> tuple[dict[str, Any], int]:
     return validate_result(result), duration_ms
 
 
-def ask_gemini(finding: Finding) -> tuple[dict[str, Any], int]:
+def ask_gemini(finding: Finding, model: str) -> tuple[dict[str, Any], int]:
     payload = {
         "contents": [{"role": "user", "parts": [{"text": create_prompt(finding)}]}],
         "generationConfig": {
@@ -308,7 +315,7 @@ def ask_gemini(finding: Finding) -> tuple[dict[str, Any], int]:
     }
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{quote(GEMINI_MODEL, safe='')}:generateContent"
+        f"{quote(model, safe='')}:generateContent"
     )
     request = urllib.request.Request(
         url,
@@ -322,7 +329,7 @@ def ask_gemini(finding: Finding) -> tuple[dict[str, Any], int]:
             document: dict[str, Any] = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         raise HTTPException(
-            status_code=502,
+            status_code=error.code,
             detail=f"Gemini ha rechazado la petición (HTTP {error.code})",
         ) from error
     except (urllib.error.URLError, TimeoutError) as error:
@@ -353,6 +360,34 @@ def ask_gemini(finding: Finding) -> tuple[dict[str, Any], int]:
     return validate_result(result), duration_ms
 
 
+def ask_gemini_with_fallback(
+    finding: Finding,
+) -> tuple[dict[str, Any], int, str, str]:
+    """Prueba los modelos configurados y utiliza Ollama si no están disponibles."""
+    recoverable_statuses = {429, 500, 502, 503, 504}
+    started = time.perf_counter()
+
+    for model in GEMINI_MODELS:
+        try:
+            result, _ = ask_gemini(finding, model)
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            return result, duration_ms, "gemini", model
+        except HTTPException as error:
+            if error.status_code not in recoverable_statuses:
+                raise
+
+    try:
+        result, _ = ask_ollama(finding)
+    except HTTPException as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Los modelos de Gemini y el modelo local no están disponibles.",
+        ) from error
+
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    return result, duration_ms, "ollama", OLLAMA_MODEL
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
@@ -360,7 +395,7 @@ def health() -> dict[str, Any]:
         "defaultProvider": AI_PROVIDER,
         "providers": {
             "ollama": {"available": True, "model": OLLAMA_MODEL},
-            "gemini": {"available": bool(GEMINI_API_KEY), "model": GEMINI_MODEL},
+            "gemini": {"available": bool(GEMINI_API_KEY), "models": list(GEMINI_MODELS)},
         },
     }
 
@@ -379,8 +414,7 @@ def create_remediation(
         duration_ms = 0
         model = "synthetic"
     elif selected_provider == "gemini":
-        result, duration_ms = ask_gemini(finding)
-        model = GEMINI_MODEL
+        result, duration_ms, selected_provider, model = ask_gemini_with_fallback(finding)
     else:
         result, duration_ms = ask_ollama(finding)
         model = OLLAMA_MODEL
