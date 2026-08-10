@@ -1,18 +1,37 @@
-﻿# AI Remediation
+# AI Remediation
 
-Servicio sencillo para consultar Ollama y obtener una explicación educativa de un hallazgo de seguridad.
+API educativa que interpreta hallazgos de seguridad y genera propuestas de remediación revisables.
 
-## Servicios
+## Proveedores
 
-- `ollama`: ejecuta el modelo local.
-- `ai-api`: expone la API protegida mediante Bearer Token.
+- `ollama`: ejecuta Qwen en el VPS.
+- `gemini`: consulta la API de Gemini cuando se configura una clave.
 
-Ollama no publica ningún puerto hacia Internet. La API se comunica con Ollama por la red interna de Docker.
+El proveedor predeterminado se selecciona con `AI_PROVIDER`. También puede elegirse en una petición mediante `?provider=ollama` o `?provider=gemini`.
+
+## Seguridad
+
+La API está protegida mediante Bearer Token. No modifica repositorios, no ejecuta comandos y no aplica los parches generados. Todas las propuestas incluyen `requiresHumanReview: true`.
+
+Ollama no publica ningún puerto hacia Internet. Las claves se configuran como variables protegidas en Dokploy y nunca se entregan al navegador.
 
 ## Configuración
 
-Copia `.env.example` como `.env` y cambia `AI_API_KEY` por una clave propia.
-En Dokploy, la clave debe configurarse como variable de entorno y no guardarse en Git.
+Para ejecutar el proyecto en local, copia `.env.example` como `.env` y configura al menos:
+
+```env
+AI_API_KEY=una-clave-propia
+AI_PROVIDER=ollama
+```
+
+Para habilitar Gemini añade:
+
+```env
+GEMINI_API_KEY=clave-generada-en-google-ai-studio
+GEMINI_MODEL=gemini-flash-latest
+```
+
+No guardes el fichero `.env` en Git.
 
 ## Despliegue
 
@@ -21,7 +40,7 @@ docker compose -f compose.yml up -d --build
 docker compose -f compose.yml exec ollama ollama pull qwen2.5-coder:3b
 ```
 
-La API escucha internamente en el puerto `8000`. En Dokploy se publica mediante un dominio HTTPS.
+La API escucha internamente en el puerto `8000`. En Dokploy debe publicarse mediante un dominio HTTPS.
 
 ## Endpoints
 
@@ -36,7 +55,22 @@ La consulta `POST` requiere:
 Authorization: Bearer tu-clave
 ```
 
-El servicio no modifica repositorios, no ejecuta comandos y no decide si se permite el despliegue.
-La recomendación debe ser revisada por una persona y validada mediante una nueva ejecución del analizador.
+Ejemplo de selección de proveedor:
 
-Los identificadores `CVE-TEST-*` y `TEST-*` se consideran hallazgos sintéticos y se responden sin consultar al modelo.
+```text
+POST /api/v1/remediations?provider=gemini
+```
+
+## Contexto para el parche
+
+La petición admite estos campos opcionales:
+
+- `currentVersion`: versión utilizada.
+- `fixedVersion`: versión corregida proporcionada por el analizador.
+- `affectedFile`: archivo relacionado con el hallazgo.
+- `line`: línea afectada.
+- `sourceContext`: fragmento mínimo necesario para proponer el cambio.
+
+La propuesta de parche solo se genera cuando `affectedFile` y `sourceContext` proporcionan información suficiente. Si faltan datos, la API devuelve `patchProposal.available: false` en lugar de inventar una solución.
+
+Los identificadores `CVE-TEST-*` y `TEST-*` se consideran sintéticos y se responden sin consultar ningún modelo.

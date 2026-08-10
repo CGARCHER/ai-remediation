@@ -3,7 +3,7 @@ services:
     image: ollama/ollama:latest
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
-      OLLAMA_KEEP_ALIVE: 5m
+      OLLAMA_KEEP_ALIVE: "-1"
     volumes:
       - ollama-data:/root/.ollama
     expose:
@@ -13,8 +13,11 @@ services:
   ai-api:
     build: ./api
     environment:
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:3b}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
       AI_API_KEY: ${AI_API_KEY:?Define AI_API_KEY en Dokploy o en .env}
     expose:
       - "8000"
