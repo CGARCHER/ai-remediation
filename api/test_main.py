@@ -2,7 +2,13 @@ import unittest
 
 from fastapi import HTTPException
 
-from main import Finding, is_safe_relative_path, synthetic_remediation, validate_result
+from main import (
+    Finding,
+    is_safe_relative_path,
+    parse_json_response,
+    synthetic_remediation,
+    validate_result,
+)
 
 
 class RemediationTests(unittest.TestCase):
@@ -45,6 +51,11 @@ class RemediationTests(unittest.TestCase):
 
     def test_parent_directory_is_rejected(self) -> None:
         self.assertFalse(is_safe_relative_path("../pom.xml"))
+
+    def test_json_inside_markdown_is_accepted(self) -> None:
+        result = parse_json_response('```json\n{"available": true}\n```')
+
+        self.assertTrue(result["available"])
 
     def test_invalid_patch_path_is_rejected(self) -> None:
         with self.assertRaises(HTTPException):

@@ -247,6 +247,18 @@ def validate_result(result: Any) -> dict[str, Any]:
     }
 
 
+def parse_json_response(value: str) -> Any:
+    """Interpreta JSON puro o incluido en un bloque Markdown."""
+    text = value.strip()
+    if text.startswith("```"):
+        first_line, separator, remainder = text.partition("\n")
+        if separator and first_line.lower() in {"```", "```json"}:
+            text = remainder
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+    return json.loads(text.strip())
+
+
 def ask_ollama(finding: Finding) -> tuple[dict[str, Any], int]:
     payload = {
         "model": OLLAMA_MODEL,
@@ -289,7 +301,7 @@ def ask_gemini(finding: Finding) -> tuple[dict[str, Any], int]:
         "contents": [{"role": "user", "parts": [{"text": create_prompt(finding)}]}],
         "generationConfig": {
             "temperature": 0.1,
-            "maxOutputTokens": 600,
+            "maxOutputTokens": 900,
             "responseMimeType": "application/json",
             "responseJsonSchema": REMEDIATION_SCHEMA,
         },
@@ -317,10 +329,25 @@ def ask_gemini(finding: Finding) -> tuple[dict[str, Any], int]:
         raise HTTPException(status_code=502, detail=f"Error consultando Gemini: {error}") from error
 
     try:
-        raw_result = document["candidates"][0]["content"]["parts"][0]["text"]
-        result = json.loads(raw_result)
+        candidate = document["candidates"][0]
+        parts = candidate["content"]["parts"]
+        raw_result = "".join(
+            part["text"]
+            for part in parts
+            if isinstance(part, dict) and isinstance(part.get("text"), str)
+        )
+        result = parse_json_response(raw_result)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
-        raise HTTPException(status_code=502, detail="Gemini no devolvió un JSON válido") from error
+        candidates = document.get("candidates")
+        finish_reason = (
+            candidates[0].get("finishReason", "desconocido")
+            if isinstance(candidates, list) and candidates and isinstance(candidates[0], dict)
+            else "desconocido"
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini no devolvió un JSON válido (motivo: {finish_reason})",
+        ) from error
 
     duration_ms = int((time.perf_counter() - started) * 1000)
     return validate_result(result), duration_ms
