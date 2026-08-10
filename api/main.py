@@ -300,8 +300,8 @@ def ask_gemini(finding: Finding) -> tuple[dict[str, Any], int]:
     payload = {
         "contents": [{"role": "user", "parts": [{"text": create_prompt(finding)}]}],
         "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 900,
+            "maxOutputTokens": 2000,
+            "thinkingConfig": {"thinkingLevel": "low"},
             "responseMimeType": "application/json",
             "responseJsonSchema": REMEDIATION_SCHEMA,
         },
