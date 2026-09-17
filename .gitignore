@@ -1,3 +1,23 @@
-.env
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Entorno virtual y configuracion local
+.venv/
+venv/
+.env
+
+# Paquetes generados
+build/
+dist/
+*.egg-info/
+
+# Entornos de desarrollo y sistema operativo
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
